@@ -102,27 +102,32 @@ These are real best-of-five wall-clock measurements produced by
 arrays, and both are warmed before timing.
 
 Machine: Intel Xeon E5-2697 v4 at 2.30 GHz, Linux x86_64. Python 3.13.14,
-MDAnalysis 2.10.0, Mojo 1.0.0b3.dev2026072406.
+MDAnalysis 2.10.0, Mojo 1.1.0.dev2026081105.
 
 | kernel | Mojo | MDAnalysis | relative |
 | --- | ---: | ---: | ---: |
-| `distance_array` (2,500 x 2,500) | 11.33 ms | 57.47 ms | 5.07x faster |
-| `distance_array`, ortho PBC (2,500 x 2,500) | 14.25 ms | 247.70 ms | 17.38x faster |
-| `self_distance_array` (5,000) | 24.31 ms | 104.18 ms | 4.29x faster |
-| `calc_bonds` (2,000,000) | 11.27 ms | 62.23 ms | 5.52x faster |
-| `calc_angles` (1,000,000) | 4.03 ms | 43.83 ms | 10.87x faster |
-| `calc_dihedrals` (1,000,000) | 4.60 ms | 59.89 ms | 13.01x faster |
-| `minimize_vectors`, ortho PBC (2,000,000) | 16.21 ms | 266.49 ms | 16.44x faster |
-| centered `rmsd` (2,000,000) | 29.93 ms | 269.10 ms | 8.99x faster |
-| superposed `rmsd` (1,000,000) | 15.19 ms | 81.38 ms | 5.36x faster |
-| `contact_matrix`, cutoff 5 (5,000) | 7.16 ms | 37.42 ms | 5.22x faster |
+| `distance_array` (2,500 x 2,500) | 8.62 ms | 29.21 ms | 3.39x faster |
+| `distance_array`, ortho PBC (2,500 x 2,500) | 9.82 ms | 181.04 ms | 18.44x faster |
+| `self_distance_array` (5,000) | 10.75 ms | 61.16 ms | 5.69x faster |
+| `calc_bonds` (2,000,000) | 1.51 ms | 33.05 ms | 21.83x faster |
+| `calc_angles` (1,000,000) | 3.55 ms | 43.90 ms | 12.36x faster |
+| `calc_dihedrals` (1,000,000) | 6.21 ms | 70.75 ms | 11.38x faster |
+| `minimize_vectors`, ortho PBC (2,000,000) | 15.66 ms | 260.89 ms | 16.66x faster |
+| centered `rmsd` (2,000,000) | 23.05 ms | 194.28 ms | 8.43x faster |
+| superposed `rmsd` (1,000,000) | 13.16 ms | 72.05 ms | 5.48x faster |
+| `contact_matrix`, cutoff 5 (5,000) | 6.42 ms | 39.74 ms | 6.19x faster |
 
-Plain distance, condensed distance, and dense contacts use SIMD over contiguous
-output spans with a scalar remainder. Large all-pairs rows and batched
-angle/dihedral chunks run in parallel, while smaller calls stay serial to avoid
-thread-launch overhead.
+Plain distance, condensed distance, bonds, and dense contacts use SIMD with a
+scalar remainder. Large all-pairs rows and batched bond, angle, and dihedral
+chunks run in parallel, while smaller calls stay serial to avoid thread-launch
+overhead.
 
-No GPU path is included; CPU is the only execution device.
+No GPU path is included. The two initial sub-5x benchmark targets, plain
+distance arrays and bonds, are low-arithmetic-intensity kernels dominated by
+memory traffic. The higher-intensity angle and dihedral kernels were already
+more than 11x faster than upstream and were deliberately left alone. A GPU path
+is therefore not justified by this benchmark profile; CPU remains the only
+execution device.
 
 ## How it works
 

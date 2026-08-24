@@ -80,6 +80,12 @@ def test_simd_tail_paths():
         mojo.contact_matrix(b, cutoff=3.75),
         upstream_contacts(b, cutoff=3.75),
     )
+    assert np.allclose(
+        mojo.calc_bonds(a, a[::-1]),
+        upstream.calc_bonds(a, a[::-1]),
+        rtol=2e-6,
+        atol=4e-6,
+    )
 
 
 def test_parallel_pair_paths():
@@ -109,6 +115,18 @@ def test_parallel_element_paths():
         rng.uniform(-20.0, 20.0, size=(65_536, 3)).astype(np.float32)
         for _ in range(4)
     ]
+    assert np.allclose(
+        mojo.calc_bonds(values[0], values[1]),
+        upstream.calc_bonds(values[0], values[1]),
+        rtol=2e-6,
+        atol=4e-6,
+    )
+    assert np.allclose(
+        mojo.calc_bonds(values[0], values[1], box=ORTHO),
+        upstream.calc_bonds(values[0], values[1], box=ORTHO),
+        rtol=2e-6,
+        atol=4e-6,
+    )
     assert np.allclose(
         mojo.calc_angles(values[0], values[1], values[2]),
         upstream.calc_angles(values[0], values[1], values[2]),

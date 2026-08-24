@@ -222,9 +222,51 @@ def self_distance_array(
 def bonds(
     a: F32Ptr, b: F32Ptr, dst: F64Ptr, n: Int, box: F64Ptr, mode: Int
 ):
-    for i in range(n):
-        var x, y, z = delta_f32(a, i, b, i, box, mode)
-        dst[i] = sqrt(x * x + y * y + z * z)
+    @parameter
+    def plain_chunk(chunk_index: Int):
+        comptime W = simdwidthof[DType.float64]()
+        var i = chunk_index * PARALLEL_CHUNK_SIZE
+        var end = min(i + PARALLEL_CHUNK_SIZE, n)
+        while i + W <= end:
+            var ax = (a + 3 * i).strided_load[width=W](3).cast[DType.float64]()
+            var ay = (a + 3 * i + 1).strided_load[width=W](3).cast[DType.float64]()
+            var az = (a + 3 * i + 2).strided_load[width=W](3).cast[DType.float64]()
+            var bx = (b + 3 * i).strided_load[width=W](3).cast[DType.float64]()
+            var by = (b + 3 * i + 1).strided_load[width=W](3).cast[DType.float64]()
+            var bz = (b + 3 * i + 2).strided_load[width=W](3).cast[DType.float64]()
+            var x = ax - bx
+            var y = ay - by
+            var z = az - bz
+            dst.store(i, sqrt(x * x + y * y + z * z))
+            i += W
+        while i < end:
+            var x = Float64(a[3 * i]) - Float64(b[3 * i])
+            var y = Float64(a[3 * i + 1]) - Float64(b[3 * i + 1])
+            var z = Float64(a[3 * i + 2]) - Float64(b[3 * i + 2])
+            dst[i] = sqrt(x * x + y * y + z * z)
+            i += 1
+
+    @parameter
+    def periodic_chunk(chunk_index: Int):
+        var begin = chunk_index * PARALLEL_CHUNK_SIZE
+        var end = min(begin + PARALLEL_CHUNK_SIZE, n)
+        for i in range(begin, end):
+            var x, y, z = delta_f32(a, i, b, i, box, mode)
+            dst[i] = sqrt(x * x + y * y + z * z)
+
+    var num_chunks = (n + PARALLEL_CHUNK_SIZE - 1) // PARALLEL_CHUNK_SIZE
+    if n >= PARALLEL_ELEMENT_THRESHOLD:
+        if mode == 0:
+            parallelize[plain_chunk](num_chunks)
+        else:
+            parallelize[periodic_chunk](num_chunks)
+    else:
+        if mode == 0:
+            for chunk_index in range(num_chunks):
+                plain_chunk(chunk_index)
+        else:
+            for chunk_index in range(num_chunks):
+                periodic_chunk(chunk_index)
 
 
 def angles(

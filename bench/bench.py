@@ -160,7 +160,7 @@ def main():
     print(f"Machine: {cpu_name()}; {platform.system()} {platform.machine()}")
     print(
         f"Python {platform.python_version()}; MDAnalysis {MDAnalysis.__version__}; "
-        "Mojo 1.0.0b3.dev2026072406"
+        "Mojo 1.1.0.dev2026081105"
     )
     print()
     print("| kernel | Mojo | MDAnalysis | relative |")
