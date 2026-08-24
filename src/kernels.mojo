@@ -1,5 +1,5 @@
-from std.algorithm import parallelize
 from std.math import acos, atan2, floor, sqrt
+from std.runtime.asyncrt import TaskGroup, initialize_runtime, parallelism_level
 from std.sys.info import simd_width_of as simdwidthof
 
 comptime F32Ptr = UnsafePointer[Float32, AnyOrigin[mut=True]]
@@ -8,6 +8,38 @@ comptime U8Ptr = UnsafePointer[UInt8, AnyOrigin[mut=True]]
 comptime PARALLEL_PAIR_THRESHOLD = 262144
 comptime PARALLEL_ELEMENT_THRESHOLD = 65536
 comptime PARALLEL_CHUNK_SIZE = 4096
+
+
+@always_inline
+def parallelize[
+    origins: OriginSet, //, func: def(Int) capturing[origins] -> None
+](num_work_items: Int):
+    """Run independent work items on the CPU runtime and wait for completion.
+
+    This is the subset of the former ``std.algorithm.parallelize`` API used by
+    these kernels.  Mojo 1.1 moved that convenience wrapper to MAX, while the
+    underlying CPU runtime remains part of the standard library.
+    """
+    if num_work_items <= 0:
+        return
+    if num_work_items == 1:
+        func(0)
+        return
+    initialize_runtime()
+
+    var num_workers = min(num_work_items, parallelism_level())
+    var chunk_size, extra_items = divmod(num_work_items, num_workers)
+
+    async def work_chunk(worker: Int, chunk_size: Int, extra_items: Int):
+        var begin = worker * chunk_size + min(worker, extra_items)
+        var count = chunk_size + Int(worker < extra_items)
+        for i in range(begin, begin + count):
+            func(i)
+
+    var tasks = TaskGroup()
+    for worker in range(num_workers):
+        tasks.create_task(work_chunk(worker, chunk_size, extra_items))
+    tasks.wait()
 
 
 def nearest_integer(value: Float64) -> Float64:
