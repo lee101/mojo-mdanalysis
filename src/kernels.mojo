@@ -1,45 +1,10 @@
 from std.math import acos, atan2, floor, sqrt
-from std.runtime.asyncrt import TaskGroup, initialize_runtime, parallelism_level
 from std.sys.info import simd_width_of as simdwidthof
 
 comptime F32Ptr = UnsafePointer[Float32, AnyOrigin[mut=True]]
 comptime F64Ptr = UnsafePointer[Float64, AnyOrigin[mut=True]]
 comptime U8Ptr = UnsafePointer[UInt8, AnyOrigin[mut=True]]
-comptime PARALLEL_PAIR_THRESHOLD = 262144
-comptime PARALLEL_ELEMENT_THRESHOLD = 65536
 comptime PARALLEL_CHUNK_SIZE = 4096
-
-
-@always_inline
-def parallelize[
-    origins: OriginSet, //, func: def(Int) capturing[origins] -> None
-](num_work_items: Int):
-    """Run independent work items on the CPU runtime and wait for completion.
-
-    This is the subset of the former ``std.algorithm.parallelize`` API used by
-    these kernels.  Mojo 1.1 moved that convenience wrapper to MAX, while the
-    underlying CPU runtime remains part of the standard library.
-    """
-    if num_work_items <= 0:
-        return
-    if num_work_items == 1:
-        func(0)
-        return
-    initialize_runtime()
-
-    var num_workers = min(num_work_items, parallelism_level())
-    var chunk_size, extra_items = divmod(num_work_items, num_workers)
-
-    async def work_chunk(worker: Int, chunk_size: Int, extra_items: Int):
-        var begin = worker * chunk_size + min(worker, extra_items)
-        var count = chunk_size + Int(worker < extra_items)
-        for i in range(begin, begin + count):
-            func(i)
-
-    var tasks = TaskGroup()
-    for worker in range(num_workers):
-        tasks.create_task(work_chunk(worker, chunk_size, extra_items))
-    tasks.wait()
 
 
 def nearest_integer(value: Float64) -> Float64:
@@ -156,11 +121,8 @@ def distance_array(
             var x, y, z = delta_f32(reference, i, configuration, j, box, mode)
             dst[i * m + j] = sqrt(x * x + y * y + z * z)
 
-    if n * m >= PARALLEL_PAIR_THRESHOLD:
-        parallelize[row](n)
-    else:
-        for i in range(n):
-            row(i)
+    for i in range(n):
+        row(i)
 
 
 def self_distance_array(
@@ -211,12 +173,8 @@ def self_distance_array(
             j += 1
             k += 1
 
-    var count = n * (n - 1) // 2
-    if count >= PARALLEL_PAIR_THRESHOLD:
-        parallelize[row](n - 1)
-    else:
-        for i in range(n - 1):
-            row(i)
+    for i in range(n - 1):
+        row(i)
 
 
 def bonds(
@@ -255,18 +213,12 @@ def bonds(
             dst[i] = sqrt(x * x + y * y + z * z)
 
     var num_chunks = (n + PARALLEL_CHUNK_SIZE - 1) // PARALLEL_CHUNK_SIZE
-    if n >= PARALLEL_ELEMENT_THRESHOLD:
-        if mode == 0:
-            parallelize[plain_chunk](num_chunks)
-        else:
-            parallelize[periodic_chunk](num_chunks)
+    if mode == 0:
+        for chunk_index in range(num_chunks):
+            plain_chunk(chunk_index)
     else:
-        if mode == 0:
-            for chunk_index in range(num_chunks):
-                plain_chunk(chunk_index)
-        else:
-            for chunk_index in range(num_chunks):
-                periodic_chunk(chunk_index)
+        for chunk_index in range(num_chunks):
+            periodic_chunk(chunk_index)
 
 
 def angles(
@@ -303,13 +255,10 @@ def angles(
         for i in range(begin, end):
             element(i)
 
-    if n >= PARALLEL_ELEMENT_THRESHOLD:
-        parallelize[chunk](
-            (n + PARALLEL_CHUNK_SIZE - 1) // PARALLEL_CHUNK_SIZE
-        )
-    else:
-        for i in range(n):
-            element(i)
+    for chunk_index in range(
+        (n + PARALLEL_CHUNK_SIZE - 1) // PARALLEL_CHUNK_SIZE
+    ):
+        chunk(chunk_index)
 
 
 def dihedrals(
@@ -355,13 +304,10 @@ def dihedrals(
         for i in range(begin, end):
             element(i)
 
-    if n >= PARALLEL_ELEMENT_THRESHOLD:
-        parallelize[chunk](
-            (n + PARALLEL_CHUNK_SIZE - 1) // PARALLEL_CHUNK_SIZE
-        )
-    else:
-        for i in range(n):
-            element(i)
+    for chunk_index in range(
+        (n + PARALLEL_CHUNK_SIZE - 1) // PARALLEL_CHUNK_SIZE
+    ):
+        chunk(chunk_index)
 
 
 def minimize_f32(vectors: F32Ptr, dst: F32Ptr, n: Int, box: F64Ptr, mode: Int):
@@ -461,12 +407,9 @@ def contact_matrix(
                 dst[i * n + j] = 1
                 dst[j * n + i] = 1
 
-    if n * n >= PARALLEL_PAIR_THRESHOLD:
-        if mode == 0:
-            parallelize[full_plain_row](n)
-        else:
-            parallelize[clear_row](n)
-            parallelize[upper_row](n)
+    if mode == 0:
+        for i in range(n):
+            full_plain_row(i)
     else:
         for i in range(n):
             clear_row(i)

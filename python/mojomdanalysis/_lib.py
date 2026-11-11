@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import atexit
 import ctypes
 from pathlib import Path
-import sys
 
 import numpy as np
 
@@ -26,35 +24,6 @@ _SIGNATURES = {
 }
 
 _loaded: ctypes.CDLL | None = None
-_runtime: ctypes.CDLL | None = None
-_runtime_device: int | None = None
-
-
-def _release_runtime() -> None:
-    global _runtime_device
-    if _runtime is not None and _runtime_device is not None:
-        _runtime.KGEN_CompilerRT_AsyncRT_ReleaseCPUDevice(_runtime_device)
-        _runtime_device = None
-
-
-def _initialize_runtime() -> None:
-    global _runtime, _runtime_device
-    if _runtime_device is not None:
-        return
-    runtime_path = (
-        Path(sys.executable).resolve().parent.parent
-        / "lib"
-        / "libKGENCompilerRTShared.so"
-    )
-    _runtime = ctypes.CDLL(str(runtime_path), mode=ctypes.RTLD_GLOBAL)
-    create = _runtime.KGEN_CompilerRT_AsyncRT_GetOrCreateCPUDevice
-    create.restype = ctypes.c_void_p
-    release = _runtime.KGEN_CompilerRT_AsyncRT_ReleaseCPUDevice
-    release.argtypes = [ctypes.c_void_p]
-    _runtime_device = create()
-    if not _runtime_device:
-        raise RuntimeError("failed to initialize the Mojo CPU runtime")
-
 
 def lib() -> ctypes.CDLL:
     global _loaded
@@ -68,7 +37,6 @@ def lib() -> ctypes.CDLL:
             function = getattr(_loaded, name)
             function.argtypes = argtypes
             function.restype = restype
-        _initialize_runtime()
     return _loaded
 
 
@@ -79,4 +47,3 @@ def addr(array: np.ndarray) -> int:
     return address
 
 
-atexit.register(_release_runtime)
